@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificador de Inscripciones UNESR</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+
+        .search-box {
+            background: #e9ecef;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        input {
+            padding: 12px;
+            width: 300px;
+            margin: 10px;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 12px 30px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .result-card {
+            background: #fff;
+            padding: 25px;
+            margin: 20px 0;
+            border-left: 4px solid #28a745;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .result-item {
+            margin: 10px 0;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .highlight {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .error {
+            border-color: #dc3545;
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="color: #2c3e50; text-align: center;">Verificador de Inscripciones UNESR</h1>
+        
+        <div class="search-box">
+            <input type="text" id="cedulaInput" placeholder="Ingresa tu número de cédula">
+            <br>
+            <button onclick="buscarInscripcion()">Verificar Inscripción</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+    <script>
+        // ✂️✂️✂️ REEMPLAZAR CON TU URL DE GITHUB (RAW) ✂️✂️✂️
+        const PDF_URL = 'https://github.com/Josephbrito1/code-bored/blob/caf8a017d6385a6ef907f3076c4f6dc27958a214/LISTADOS%20CICLO%20PROFESIONAL%20MERCADEO%202025-1.pdf';
+        // ✂️✂️✂️ EJEMPLO: https://raw.githubusercontent.com/juanperez/unesr-inscripciones/main/planilla.pdf ✂️✂️✂️
+
+        async function cargarPDF() {
+            try {
+                const loadingTask = pdfjsLib.getDocument(PDF_URL);
+                return await loadingTask.promise;
+            } catch (error) {
+                mostrarError('Error al cargar el documento oficial');
+                return null;
+            }
+        }
+
+        async function buscarInscripcion() {
+            const cedula = document.getElementById('cedulaInput').value.trim();
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="result-item">Buscando...</div>';
+
+            if (!cedula || !/^\d+$/.test(cedula)) {
+                mostrarError('Ingrese un número de cédula válido');
+                return;
+            }
+
+            const pdf = await cargarPDF();
+            if (!pdf) return;
+
+            const totalPages = pdf.numPages;
+            let resultados = [];
+
+            for (let i = 1; i <= totalPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                const text = content.items.map(item => item.str).join('\n');
+                
+                if (text.includes(cedula)) {
+                    const datos = extraerDatos(text, cedula);
+                    if (datos) {
+                        resultados.push({
+                            ...datos,
+                            pagina: i
+                        });
+                    }
+                }
+            }
+
+            mostrarResultados(resultados, cedula);
+        }
+
+        function extraerDatos(texto, cedula) {
+            const lineas = texto.split('\n');
+            const cursoMatch = lineas.find(line => line.startsWith('CURSO:'));
+            const carreraMatch = lineas.find(line => line.startsWith('Carrera:'));
+            const registro = lineas.find(line => line.startsWith(cedula));
+
+            if (!registro) return null;
+
+            const [_, apellidosNombre] = registro.split(/\s{2,}/);
+            
+            return {
+                curso: cursoMatch ? cursoMatch.split(': ')[1] : 'No especificado',
+                carrera: carreraMatch ? carreraMatch.split(': ')[1] : 'No especificado',
+                cedula: cedula,
+                nombre: apellidosNombre.trim(),
+                periodo: lineas.find(line => line.includes('PERÍODO'))?.split('PERÍODO ')[1] || '2025-1'
+            };
+        }
+
+        function mostrarResultados(resultados, cedula) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            if (resultados.length === 0) {
+                mostrarError(`No se encontraron inscripciones para la cédula: ${cedula}`);
+                return;
+            }
+
+            resultados.forEach((datos, index) => {
+                const card = document.createElement('div');
+                card.className = 'result-card';
+                
+                const contenido = `
+                    <h3 style="color: #2c3e50;">Inscripción Confirmada</h3>
+                    <div class="result-item">
+                        <strong>Cédula:</strong> <span class="highlight">${datos.cedula}</span>
+                    </div>
+                    <div class="result-item">
+                        <strong>Nombre:</strong> ${datos.nombre}
+                    </div>
+                    <div class="result-item">
+                        <strong>Curso:</strong> ${datos.curso}
+                    </div>
+                    <div class="result-item">
+                        <strong>Carrera:</strong> ${datos.carrera}
+                    </div>
+                    <div class="result-item">
+                        <strong>Período:</strong> ${datos.periodo}
+                    </div>
+                    <div class="result-item" style="margin-top: 15px; color: #6c757d;">
+                        Verificado en página ${datos.pagina}
+                    </div>
+                `;
+                
+                card.innerHTML = contenido;
+                resultsDiv.appendChild(card);
+            });
+        }
+
+        function mostrarError(mensaje) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `
+                <div class="result-card error" style="border-color: #dc3545;">
+                    <h3 style="color: #dc3545;">Error</h3>
+                    <div class="result-item">${mensaje}</div>
+                </div>
+            `;
+        }
+
+        // Iniciar carga del PDF al abrir la página
+        window.onload = cargarPDF;
+    </script>
+</body>
+</html>
